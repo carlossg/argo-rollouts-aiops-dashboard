@@ -5,8 +5,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -35,10 +33,6 @@ public class DemoScenarioService {
     @ConfigProperty(name = "enable.latency.drift", defaultValue = "false")
     boolean latencyDriftEnabled;
 
-    // Memory leak simulation
-    private List<byte[]> memoryLeakList;
-    private long memoryLeakStartTime;
-
     // Latency drift simulation
     private long latencyDriftStartTime;
 
@@ -59,12 +53,6 @@ public class DemoScenarioService {
 
     @PostConstruct
     void init() {
-        // Initialize memory leak list if enabled
-        if (memoryLeakEnabled) {
-            memoryLeakList = new ArrayList<>();
-            memoryLeakStartTime = System.currentTimeMillis();
-        }
-
         // Initialize connection pool if enabled
         if (connectionLeakEnabled) {
             connectionPool = new Semaphore(MAX_CONNECTIONS);
@@ -143,76 +131,14 @@ public class DemoScenarioService {
     }
 
     /**
-     * BUG SCENARIO 1: Memory Leak
-     * Allocates 1MB byte arrays without cleanup, causing gradual memory exhaustion.
-     * This simulates a common production bug where objects are not properly released.
+     * Memory leak scenario previously retained 1MB buffers per request without cleanup
+     * and added artificial latency. Buffers are no longer retained so heap usage and
+     * response latency remain bounded.
      *
-     * Key characteristics for Scenario 3:
-     * - Gradual performance degradation (latency increases 6x over 90 seconds)
-     * - Heap memory grows linearly (150MB → 250MB)
-     * - Clear warning/error logs but NO stack traces
-     * - Root cause not obvious from logs alone (requires heap dump analysis)
-     *
-     * @return Additional latency in milliseconds caused by memory pressure
+     * @return Additional latency in milliseconds (0 when no leak occurs)
      */
     private long executeMemoryLeakScenario(long requestNumber) {
-        if (!memoryLeakEnabled) {
-            return 0;
-        }
-
-        // Allocate 1MB per request - this will cause OOM eventually
-        byte[] leak = new byte[1024 * 1024]; // 1MB
-        memoryLeakList.add(leak);
-
-        long leakedMB = memoryLeakList.size();
-        long elapsedSeconds = (System.currentTimeMillis() - memoryLeakStartTime) / 1000;
-
-        // Simulate latency increase proportional to leaked memory
-        // 0-50MB: 0-50ms additional latency
-        // 50-100MB: 50-150ms additional latency
-        // 100MB+: 150-300ms additional latency
-        long additionalLatency = 0;
-        if (leakedMB < 50) {
-            additionalLatency = leakedMB; // 0-50ms
-        } else if (leakedMB < 100) {
-            additionalLatency = 50 + (leakedMB - 50) * 2; // 50-150ms
-        } else {
-            additionalLatency = 150 + Math.min((leakedMB - 100) * 3, 150); // 150-300ms (capped)
-        }
-
-        // Simulate the latency
-        try {
-            Thread.sleep(additionalLatency);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        // Log memory leak warnings at specific thresholds
-        // These logs are intentionally vague - no stack traces, no obvious root cause
-        if (leakedMB == 50) {
-            LOG.warn("Performance degradation detected: Response times increasing. " +
-                "Heap usage: " + leakedMB + "MB. Elapsed time: " + elapsedSeconds + "s");
-        }
-
-        if (leakedMB == 100) {
-            LOG.error("CRITICAL: Severe performance degradation. Response times 3x baseline. " +
-                "Heap usage: " + leakedMB + "MB. Elapsed time: " + elapsedSeconds + "s. " +
-                "GC activity increasing.");
-        }
-
-        if (leakedMB == 150) {
-            LOG.error("CRITICAL: Application struggling. Response times 6x baseline. " +
-                "Heap usage: " + leakedMB + "MB. Elapsed time: " + elapsedSeconds + "s. " +
-                "Memory pressure critical. Recommend heap dump analysis.");
-        }
-
-        // Periodic warnings every 50 requests after initial thresholds
-        if (leakedMB > 150 && requestNumber % 50 == 0) {
-            LOG.warn("Ongoing performance issues: Heap usage: " + leakedMB + "MB, " +
-                "Latency: ~" + additionalLatency + "ms, Elapsed: " + elapsedSeconds + "s");
-        }
-
-        return additionalLatency;
+        return 0;
     }
 
     /**

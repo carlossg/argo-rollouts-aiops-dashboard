@@ -112,8 +112,7 @@ public class MetricsResource {
         // Add bug scenario indicators to status.
         // Latency drift is intentionally excluded: that scenario must look healthy
         // everywhere except in the latency metrics.
-        if (scenarioService.isMemoryLeakEnabled() ||
-            scenarioService.isConnectionLeakEnabled() ||
+        if (scenarioService.isConnectionLeakEnabled() ||
             scenarioService.isCpuSpikeEnabled()) {
             status = "buggy-" + status;
         }
